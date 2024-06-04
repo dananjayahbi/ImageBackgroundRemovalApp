@@ -10,6 +10,25 @@ const App = () => {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [processedImage, setProcessedImage] = useState(null);
+  const [imageId, setImageId] = useState(null);
+
+  const checkImageStatus = async (id) => {
+    try {
+      const response = await axios.get(`http://localhost:3000/status/${id}`);
+      if (response.data.status === "completed") {
+        const imageUrl = `http://localhost:3000/image/${id}`;
+        setProcessedImage(imageUrl);
+        setLoading(false);
+        message.success("Image processed successfully!");
+      } else {
+        setTimeout(() => checkImageStatus(id), 2000);
+      }
+    } catch (error) {
+      console.error(error);
+      setLoading(false);
+      message.error("Error checking image status.");
+    }
+  };
 
   const handleUpload = async () => {
     if (!file) {
@@ -23,21 +42,15 @@ const App = () => {
     setLoading(true);
     try {
       const response = await axios.post(
-        "http://localhost:3000/remove-bg",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
+        "http://localhost:3000/upload",
+        formData
       );
-
-      setProcessedImage(response.data);
-      setLoading(false);
-      message.success("Image processed successfully!");
+      const { id } = response.data;
+      setImageId(id);
+      setTimeout(() => checkImageStatus(id), 2000);
     } catch (error) {
       setLoading(false);
-      message.error("Error processing image.");
+      message.error("Error uploading image.");
       console.error(error);
     }
   };
@@ -72,7 +85,7 @@ const App = () => {
             type="primary"
             onClick={handleUpload}
             style={{ marginTop: 20 }}
-            disabled={!file}
+            disabled={!file || loading}
           >
             Upload and Remove Background
           </Button>
@@ -80,7 +93,7 @@ const App = () => {
           {processedImage && (
             <div style={{ marginTop: 20 }}>
               <Title level={4}>Processed Image</Title>
-              <Image src={processedImage.imageUrl} alt="Processed" />
+              <Image src={processedImage} alt="Processed" />
             </div>
           )}
         </div>

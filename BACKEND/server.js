@@ -3,74 +3,64 @@ const multer = require("multer");
 const { exec } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { v4: uuidv4 } = require("uuid");
+const os = require("os");
+const cors = require("cors"); // Import cors package
 
 const app = express();
 const port = 3000;
 
-// Ensure the "outputs" directory exists
-if (!fs.existsSync("outputs")) {
-  fs.mkdirSync("outputs");
-}
+const upload = multer({ dest: "uploads/" });
 
-// Serve static files from the "outputs" directory
-app.use('/outputs', express.static('outputs'));
+const pythonCommand = os.platform() === "win32" ? "python" : "python3";
 
-// Multer storage configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}${ext}`);
-  },
+app.use(cors()); // Use the cors middleware
+
+app.post("/upload", upload.single("image"), (req, res) => {
+  const file = req.file;
+  const id = uuidv4();
+  const fileExtension = path.extname(file.originalname);
+  const inputFilePath = `uploads/${id}${fileExtension}`;
+  const outputFilePath = `outputs/${id}.png`;
+
+  fs.rename(file.path, inputFilePath, (err) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Error renaming file");
+    }
+
+    exec(
+      `${pythonCommand} remove_bg.py ${inputFilePath} ${outputFilePath}`,
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error(`exec error: ${error}`);
+          return res.status(500).send("Error processing image");
+        }
+
+        res.json({ id });
+      }
+    );
+  });
 });
 
-const upload = multer({ storage: storage });
+app.get("/status/:id", (req, res) => {
+  const id = req.params.id;
+  const outputFilePath = path.resolve(`outputs/${id}.png`);
 
-const execPromise = (command) => {
-  return new Promise((resolve, reject) => {
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        reject(`exec error: ${error}`);
-      } else {
-        resolve(stdout);
-      }
-    });
+  fs.access(outputFilePath, fs.constants.F_OK, (err) => {
+    if (err) {
+      return res.json({ status: "processing" });
+    }
+
+    res.json({ status: "completed" });
   });
-};
+});
 
-app.post("/remove-bg", upload.single("image"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).send("No file uploaded.");
-  }
-
-  const inputFilePath = req.file.path;
-  const outputFilePath = `outputs/${req.file.filename}-output.png`;
-
-  console.log(`Processing file: ${inputFilePath}`);
-
-  try {
-    await execPromise(`python remove_bg.py ${inputFilePath} ${outputFilePath}`);
-
-    fs.access(outputFilePath, fs.constants.F_OK, (err) => {
-      if (err) {
-        console.error(`File not found: ${outputFilePath}`);
-        return res.status(500).send("Error processing image");
-      }
-
-      console.log(`Successfully processed file: ${outputFilePath}`);
-      res.json({ imageUrl: `http://localhost:${port}/outputs/${path.basename(outputFilePath)}` });
-
-      // Clean up files
-      fs.unlink(inputFilePath, (err) => {
-        if (err) console.error(`Error deleting input file: ${err}`);
-      });
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Error processing image");
-  }
+app.get("/image/:id", (req, res) => {
+  const id = req.params.id;
+  const outputFilePath = path.resolve(`outputs/${id}.png`);
+  // const inputFilePath = path.resolve(`uploads/${id}${fileExtension}`);
+  res.sendFile(outputFilePath);
 });
 
 app.listen(port, () => {
