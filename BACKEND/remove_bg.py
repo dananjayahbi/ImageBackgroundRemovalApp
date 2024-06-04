@@ -10,7 +10,5 @@ def main():
     output_image = remove(input_image)
     output_image.save(output_path)
 
-    print("true")  # print "true" after successful execution
-
 if __name__ == "__main__":
     main()

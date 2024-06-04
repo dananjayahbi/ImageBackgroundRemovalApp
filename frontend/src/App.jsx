@@ -26,12 +26,13 @@ const App = () => {
         "http://localhost:3000/remove-bg",
         formData,
         {
-          responseType: "blob",
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
         }
       );
 
-      const imageUrl = URL.createObjectURL(new Blob([response.data]));
-      setProcessedImage(imageUrl);
+      setProcessedImage(response.data);
       setLoading(false);
       message.success("Image processed successfully!");
     } catch (error) {
